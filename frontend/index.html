@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Excel Matching</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>การจับคู่ข้อมูล Excel (VLOOKUP)</h1>
+    <p class="subtitle">เทียบ 7 คอลัมน์: ชื่อลูกค้า, ไฟแนนซ์, Moder Code, เลขถัง, ราคาขาย, COM F/N, COM</p>
+
+    <section class="card">
+      <h2>อัปโหลดไฟล์</h2>
+      <div class="grid">
+        <div>
+          <label for="esg-file">ไฟล์ตั้งต้น (ESG)</label>
+          <input type="file" id="esg-file" accept=".xls,.xlsx,.xlsm" />
+          <div id="esg-name" class="filename">ยังไม่ได้เลือก</div>
+        </div>
+        <div>
+          <label for="tax-file">ไฟล์ภาษีขาย</label>
+          <input type="file" id="tax-file" accept=".xls,.xlsx,.xlsm" />
+          <div id="tax-name" class="filename">ยังไม่ได้เลือก</div>
+        </div>
+      </div>
+      <div class="grid">
+        <div>
+          <label for="sheet-name">ชื่อชีตภาษีขาย</label>
+          <input type="text" id="sheet-name" value="ไมวัน" placeholder="ตารางไมวัน" />
+        </div>
+      </div>
+      <p class="options-hint">ใช้ชีต ESG: เงินรางวัลเรียกเก็บ ESG · คีย์จับคู่หลัก: เลขถัง</p>
+      <button id="btn-match" disabled>เทียบข้อมูล (Match)</button>
+      <p id="api-status" class="status"></p>
+    </section>
+
+    <section class="card" id="result-section" hidden>
+      <h2>สรุปผล</h2>
+      <div id="summary" class="summary"></div>
+      <div class="table-wrap">
+        <table id="result-table">
+          <thead>
+            <tr id="result-thead">
+              <th>ลำดับ</th>
+            </tr>
+          </thead>
+          <tbody id="result-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
