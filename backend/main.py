@@ -94,7 +94,9 @@ def _match_rows(
                 continue
             lookups[ci].setdefault(key, []).append(row)
 
-    fallback_keys = [3, 0, 1]  # tank -> customer -> finance
+    # ถ้าใช้เลขถังเป็น key หลัก ให้ strict เฉพาะ key นี้
+    # (ลดโอกาสไปแมตช์คนอื่นจากคีย์รองเวลาเทสแก้ข้อมูล)
+    fallback_keys = [] if match_key_col == 3 else [3, 0, 1]  # tank -> customer -> finance
     results: list[dict] = []
 
     for idx, esg_row in enumerate(esg_rows):
@@ -120,13 +122,15 @@ def _match_rows(
                 add_by_col(fk)
 
         if not candidates:
+            compared = [bool(_norm(v)) for v in esg_row]
             results.append(
                 {
                     "row": idx + 1,
                     "values_esg": esg_row,
                     "values_tax": [""] * len(esg_row),
-                    "cells_match": [False] * len(esg_row),
-                    "cells_compared": [False] * len(esg_row),
+                    # ไม่มีแถวอ้างอิง => คอลัมน์ที่ ESG มีค่าถือว่า "ไม่ตรง"
+                    "cells_match": [False if compared[i] else True for i in range(len(esg_row))],
+                    "cells_compared": compared,
                     "all_match": False,
                     "found": False,
                 }
