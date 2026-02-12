@@ -10,6 +10,7 @@ from __future__ import annotations
 import shutil
 import tempfile
 import time
+import re
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
@@ -44,6 +45,11 @@ def _norm(v: str) -> str:
     return (v or "").strip()
 
 
+def _norm_tank(v: str) -> str:
+    # normalize เลขถัง: ตัดช่องว่าง/ขีด/อักขระพิเศษ และ upper-case
+    return re.sub(r"[^A-Za-z0-9]", "", _norm(v)).upper()
+
+
 def _cell_match(esg_val: str, tax_val: str, col_index: int, case_sensitive: bool = True) -> tuple[bool, bool]:
     """
     return (is_match, is_compared)
@@ -60,6 +66,10 @@ def _cell_match(esg_val: str, tax_val: str, col_index: int, case_sensitive: bool
         la = " ".join(a.lower().split())
         lb = " ".join(b.lower().split())
         return la == lb, True
+
+    # เลขถัง: เทียบแบบ normalize เสมอ เพื่อให้ match ได้แม้รูปแบบต่างกัน
+    if col_index == 3:
+        return _norm_tank(a) == _norm_tank(b), True
 
     try:
         na = float(a.replace(",", ""))
@@ -78,18 +88,23 @@ def _match_rows(
     tax_rows: list[list[str]],
     match_key_col: int = 3,
     case_sensitive: bool = True,
+    compare_indexes: list[int] | None = None,
 ) -> list[dict]:
+    if compare_indexes is None:
+        compare_indexes = [3, 4, 5, 6]  # เลขถัง, ราคาขาย, COM F/N, COM
     # lookup โดย key หลัก + key รอง (เลขถัง, ชื่อลูกค้า, ไฟแนนซ์)
     max_cols = max([len(r) for r in tax_rows], default=0)
     lookups: list[dict] = [{} for _ in range(max_cols)]
 
-    def k(v: str) -> str:
+    def k(ci: int, v: str) -> str:
+        if ci == 3:
+            return _norm_tank(v)
         x = _norm(v)
         return x if case_sensitive else x.lower()
 
     for row in tax_rows:
         for ci in range(min(len(row), max_cols)):
-            key = k(row[ci])
+            key = k(ci, row[ci])
             if not key:
                 continue
             lookups[ci].setdefault(key, []).append(row)
@@ -106,7 +121,7 @@ def _match_rows(
         def add_by_col(ci: int):
             if ci < 0 or ci >= len(esg_row) or ci >= len(lookups):
                 return
-            key = k(esg_row[ci])
+            key = k(ci, esg_row[ci])
             if not key:
                 return
             for cand in lookups[ci].get(key, []):
@@ -122,7 +137,7 @@ def _match_rows(
                 add_by_col(fk)
 
         if not candidates:
-            compared = [bool(_norm(v)) for v in esg_row]
+            compared = [(i in compare_indexes) and bool(_norm(esg_row[i])) for i in range(len(esg_row))]
             results.append(
                 {
                     "row": idx + 1,
@@ -141,7 +156,9 @@ def _match_rows(
             vals = list(cand) + [""] * (len(esg_row) - len(cand))
             vals = vals[: len(esg_row)]
             m, c = 0, 0
-            for i in range(len(esg_row)):
+            for i in compare_indexes:
+                if i >= len(esg_row):
+                    continue
                 ok, compared = _cell_match(esg_row[i], vals[i], i, case_sensitive=case_sensitive)
                 if compared:
                     c += 1
@@ -155,7 +172,10 @@ def _match_rows(
 
         cells_match, cells_compared = [], []
         for i in range(len(esg_row)):
-            ok, compared = _cell_match(esg_row[i], tax_vals[i], i, case_sensitive=case_sensitive)
+            if i in compare_indexes:
+                ok, compared = _cell_match(esg_row[i], tax_vals[i], i, case_sensitive=case_sensitive)
+            else:
+                ok, compared = True, False
             cells_match.append(ok)
             cells_compared.append(compared)
         compared_idx = [i for i, x in enumerate(cells_compared) if x]
@@ -317,7 +337,46 @@ async def match_columns(
             start_row=tax_start_row,
         )
 
-        results = _match_rows(esg_rows, tax_rows, match_key_col=match_key_col, case_sensitive=case_sensitive)
+        # เทียบเฉพาะ: เลขถัง, ราคาขาย, COM F/N, COM
+        results = _match_rows(
+            esg_rows,
+            tax_rows,
+            match_key_col=match_key_col,
+            case_sensitive=case_sensitive,
+            compare_indexes=[3, 4, 5, 6],
+        )
+
+        # ถ้ารอบแรกหาแถวไม่เจอเกือบทั้งหมด ให้ auto-recover ด้วยการ detect layout ใหม่
+        found_count = sum(1 for x in results if x.get("found"))
+        if found_count == 0:
+            auto_tax_cols, auto_tax_start, auto_tax_sheet, auto_tax_scores = detect_compare_layout(
+                tmp_tax,
+                sheet_name=None,
+                fallback_cols=[1, 2, 4, 5, 7, 13, 14],
+            )
+            required = ["tank", "price", "com_fn", "com"]
+            missing = [f for f in required if auto_tax_scores.get(f, 0) <= 0]
+            if not missing:
+                retry_tax_rows = read_tax_sheet_rows(
+                    tmp_tax,
+                    sheet_name=auto_tax_sheet,
+                    col_indices=auto_tax_cols,
+                    start_row=auto_tax_start,
+                )
+                retry_results = _match_rows(
+                    esg_rows,
+                    retry_tax_rows,
+                    match_key_col=match_key_col,
+                    case_sensitive=case_sensitive,
+                    compare_indexes=[3, 4, 5, 6],
+                )
+                retry_found = sum(1 for x in retry_results if x.get("found"))
+                if retry_found > found_count:
+                    results = retry_results
+                    tax_rows = retry_tax_rows
+                    tax_col_indices = auto_tax_cols
+                    tax_start_row = auto_tax_start
+                    detected_tax_sheet = auto_tax_sheet
 
         for r in results:
             mismatches = []

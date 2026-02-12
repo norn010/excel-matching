@@ -52,8 +52,7 @@ async function callMatch() {
   const esgSheetName = "เงินรางวัลเรียกเก็บ ESG";
   const matchKeyCol = 3; // เลขถัง
   const esgCols = "2,3,5,6,8,14,15"; // ชีตเงินรางวัลเรียกเก็บ ESG
-  const taxCols = "1,2,4,5,7,13,14"; // ชีตตารางไมวัน
-  const url = `${API_BASE}/match-columns?sheet_name=${encodeURIComponent(sheetName)}&esg_sheet_name=${encodeURIComponent(esgSheetName)}&esg_cols=${encodeURIComponent(esgCols)}&tax_cols=${encodeURIComponent(taxCols)}&match_key_col=${matchKeyCol}&case_sensitive=true`;
+  const url = `${API_BASE}/match-columns?sheet_name=${encodeURIComponent(sheetName)}&esg_sheet_name=${encodeURIComponent(esgSheetName)}&esg_cols=${encodeURIComponent(esgCols)}&match_key_col=${matchKeyCol}&case_sensitive=true`;
 
   try {
     const res = await fetch(url, { method: "POST", body: form });

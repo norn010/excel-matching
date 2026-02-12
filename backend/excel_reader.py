@@ -288,7 +288,17 @@ def read_tax_sheet_rows(
         try:
             sh = wb.sheet_by_name(sheet_name)
         except Exception:
-            sh = wb.sheet_by_index(0)
+            # fallback: จับชื่อชีตแบบใกล้เคียง (เช่น พิมพ์ "ไมวัน" แทน "ตารางไมวัน")
+            sh = None
+            want = _norm_sheet_name(sheet_name)
+            for i in range(wb.nsheets):
+                cand = wb.sheet_by_index(i)
+                cname = _norm_sheet_name(cand.name)
+                if want and (want in cname or cname in want):
+                    sh = cand
+                    break
+            if sh is None:
+                sh = wb.sheet_by_index(0)
         rows_out = []
         for r in range(start_row, sh.nrows):
             vals = []

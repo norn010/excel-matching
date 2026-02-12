@@ -1,0 +1,4 @@
+backend
+python main.py
+fronend
+http://localhost:8000/app/
