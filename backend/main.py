@@ -256,6 +256,7 @@ async def match_columns(
     match_key_col: int = Query(3, description="0=ชื่อลูกค้า, 1=ไฟแนนซ์, 3=เลขถัง"),
     case_sensitive: bool = Query(True),
 ):
+    started_at = time.perf_counter()
     esg_suffix = Path(esg_file.filename or "").suffix.lower()
     tax_suffix = Path(tax_file.filename or "").suffix.lower()
     if esg_suffix not in (".xls", ".xlsx", ".xlsm") or tax_suffix not in (".xls", ".xlsx", ".xlsm"):
@@ -302,7 +303,8 @@ async def match_columns(
                 fallback_cols=[1, 2, 4, 5, 7, 13, 14],
             )
             # ถ้าอ่านไฟล์ที่โครงคนละแบบมากๆ ให้แจ้งแทนการเทียบมั่ว
-            required = ["customer", "finance", "model", "tank", "price"]
+            # ตอนนี้เทียบเฉพาะ: เลขถัง, ราคาขาย, COM F/N, COM
+            required = ["tank", "price", "com_fn", "com"]
             missing = [f for f in required if tax_scores.get(f, 0) <= 0]
             if missing:
                 raise HTTPException(
@@ -395,10 +397,12 @@ async def match_columns(
             r["mismatches"] = mismatches
 
         all_match_count = sum(1 for x in results if x.get("all_match"))
+        elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
         return JSONResponse(
             {
                 "column_labels": COMPARE_COLUMN_LABELS,
                 "match_key_label": COMPARE_COLUMN_LABELS[match_key_col] if match_key_col < len(COMPARE_COLUMN_LABELS) else "คอลัมน์จับคู่",
+                "elapsed_ms": elapsed_ms,
                 "detected": {
                     "esg_sheet": detected_esg_sheet,
                     "tax_sheet": detected_tax_sheet,

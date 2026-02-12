@@ -66,10 +66,14 @@ async function callMatch() {
     apiStatus.className = "status success";
     apiStatus.textContent = "เทียบข้อมูลเสร็จแล้ว";
 
-    const { column_labels, match_key_label, summary, results } = data;
+    const { column_labels, match_key_label, summary, results, elapsed_ms } = data;
+    const elapsedText = typeof elapsed_ms === "number"
+      ? `${(elapsed_ms / 1000).toFixed(2)} วินาที`
+      : "-";
     summaryEl.innerHTML = `
       <p>รวมแถว: <strong>${summary.total_rows}</strong> · ตรงทุกคอลัมน์ (แถวเขียว): <strong class="ok">${summary.all_match}</strong> · มีคอลัมน์ไม่ตรง (แถวเหลือง): <strong class="warn">${summary.has_mismatch}</strong></p>
       <p class="hint">เงื่อนไขจับคู่แถว: <strong>${escapeHtml(match_key_label || "เลขถัง")}</strong> เป็นตัวหลัก</p>
+      <p class="hint">เวลาในการเทียบข้อมูล: <strong>${escapeHtml(elapsedText)}</strong></p>
     `;
 
     resultThead.innerHTML = "<th>ลำดับ</th>" + (column_labels || []).map((x) => `<th>${escapeHtml(x)}</th>`).join("") + "<th>ข้อมูลที่ไม่ตรง</th>";
